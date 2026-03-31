@@ -17,6 +17,7 @@ type Handler struct {
 type authService interface {
 	Register(email, password string) (AuthResult, error)
 	Login(email, password string) (AuthResult, error)
+	Logout(token string) error
 	Authenticate(token string) (User, error)
 }
 
@@ -116,6 +117,36 @@ func (h *Handler) Login(c *gin.Context) {
 
 	c.JSON(http.StatusOK, buildAuthResponse(result))
 }
+
+func (h *Handler) Logout(c *gin.Context) {
+	token := extractBearerToken(c.GetHeader("Authorization"))
+	if token == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing bearer token"})
+		return
+	}
+
+	err := h.service.Logout(token)
+	if err != nil {
+		var apiErr *SupabaseAPIError
+
+		switch {
+		case errors.As(err, &apiErr):
+			c.JSON(apiErr.Status, gin.H{
+				"error":   "supabase auth error",
+				"details": apiErr.Body,
+			})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":   "failed to logout",
+				"details": err.Error(),
+			})
+		}
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
 
 func (h *Handler) Me(c *gin.Context) {
 	user, ok := CurrentUser(c)

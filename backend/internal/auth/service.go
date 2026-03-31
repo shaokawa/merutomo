@@ -78,6 +78,15 @@ func (s *Service) Login(email, password string) (AuthResult, error) {
 	}, nil
 }
 
+func (s *Service) Logout(token string) error {
+	if strings.TrimSpace(token) == "" {
+		return ErrUnauthorized
+	}
+
+	return s.supabase.SignOut(token)
+}
+
+
 func (s *Service) Authenticate(token string) (User, error) {
 	user, err := s.supabase.GetUser(token)
 	if err != nil {

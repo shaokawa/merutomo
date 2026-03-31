@@ -88,6 +88,17 @@ func TestMeRejectsMissingToken(t *testing.T) {
 	}
 }
 
+func TestLogoutReturnsNoContent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	engine := newTestRouter()
+
+	resp := performJSONRequest(t, engine, http.MethodPost, "/auth/logout", nil, "token-value")
+	if resp.Code != http.StatusNoContent {
+		t.Fatalf("expected 204 from logout, got %d", resp.Code)
+	}
+}
+
 func newTestRouter() *gin.Engine {
 	engine := gin.New()
 	handler := auth.NewHandler(newFakeAuthService())
@@ -165,6 +176,14 @@ func (s *fakeAuthService) Login(email, password string) (auth.AuthResult, error)
 			Email: user.Email,
 		},
 	}, nil
+}
+
+func (s *fakeAuthService) Logout(token string) error {
+	if strings.TrimSpace(token) == "" {
+		return auth.ErrUnauthorized
+	}
+
+	return nil
 }
 
 func (s *fakeAuthService) Authenticate(token string) (auth.User, error) {

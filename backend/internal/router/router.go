@@ -18,4 +18,5 @@ func Setup(r *gin.Engine, authHandler *auth.Handler) {
 	authGroup.POST("/register", authHandler.Register)
 	authGroup.POST("/login", authHandler.Login)
 	authGroup.GET("/me", authHandler.RequireAuth(), authHandler.Me)
+	authGroup.POST("/logout", authHandler.Logout)
 }

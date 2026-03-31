@@ -206,3 +206,34 @@ func (c *SupabaseClient) GetUser(accessToken string) (User, error) {
 		Body:   strings.TrimSpace(string(raw)),
 	}
 }
+
+func (c *SupabaseClient) SignOut(accessToken string) error {
+	req, err := http.NewRequest(http.MethodPost, c.baseURL+"/auth/v1/logout", nil)
+	if err != nil {
+		return fmt.Errorf("build logout request: %w", err)
+	}
+
+	req.Header.Set("apikey", c.anonKey)
+	req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(accessToken))
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("send logout request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read logout response: %w", err)
+	}
+
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return nil
+	}
+
+	return &SupabaseAPIError{
+		Status: resp.StatusCode,
+		Body:   strings.TrimSpace(string(raw)),
+	}
+}
+
