@@ -10,16 +10,24 @@ import (
 )
 
 var (
-	ErrEmailAlreadyExists = errors.New("email already exists")
-	ErrInvalidCredentials = errors.New("invalid credentials")
-	ErrUnauthorized       = errors.New("unauthorized")
+	ErrEmailAlreadyExists    = errors.New("email already exists")
+	ErrInvalidCredentials    = errors.New("invalid credentials")
+	ErrInvalidProfile        = errors.New("invalid profile")
+	ErrUsernameAlreadyExists = errors.New("username already exists")
+	ErrUserProfileNotFound   = errors.New("user profile not found")
+	ErrUnauthorized          = errors.New("unauthorized")
 )
 
 type User struct {
-	ID           string
-	Email        string
-	PasswordHash []byte
-	CreatedAt    time.Time
+	ID              string
+	Email           string
+	DisplayName     string
+	Username        string
+	ProfileText     string
+	AvatarURL       string
+	EmailVisibility string
+	PasswordHash    []byte
+	CreatedAt       time.Time
 }
 
 type session struct {

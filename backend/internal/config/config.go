@@ -8,9 +8,9 @@ import (
 )
 
 type Config struct {
-	Port        string
-	DatabaseURL string
-	SupabaseURL string
+	Port            string
+	DatabaseURL     string
+	SupabaseURL     string
 	SupabaseAnonKey string
 }
 
@@ -18,8 +18,8 @@ func Load() (Config, error) {
 	_ = godotenv.Load()
 
 	cfg := Config{
-		Port:        getEnv("PORT", "8080"),
-		DatabaseURL: os.Getenv("DATABASE_URL"),
+		Port:            getEnv("PORT", "8080"),
+		DatabaseURL:     os.Getenv("DATABASE_URL"),
 		SupabaseURL:     os.Getenv("SUPABASE_URL"),
 		SupabaseAnonKey: os.Getenv("SUPABASE_ANON_KEY"),
 	}
@@ -35,6 +35,17 @@ func Load() (Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func LoadDatabaseURL() (string, error) {
+	_ = godotenv.Load()
+
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		return "", fmt.Errorf("DATABASE_URL is required")
+	}
+
+	return databaseURL, nil
 }
 
 func getEnv(key, fallback string) string {

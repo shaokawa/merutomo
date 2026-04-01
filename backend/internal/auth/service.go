@@ -8,7 +8,8 @@ import (
 const minPasswordLength = 8
 
 type Service struct {
-	supabase *SupabaseClient
+	supabase     *SupabaseClient
+	profileStore ProfileStore
 }
 
 type AuthResult struct {
@@ -17,14 +18,18 @@ type AuthResult struct {
 	NeedsEmailConfirmation bool
 }
 
-func NewService(supabase *SupabaseClient) *Service {
+func NewService(supabase *SupabaseClient, profileStore ProfileStore) *Service {
 	return &Service{
-		supabase: supabase,
+		supabase:     supabase,
+		profileStore: profileStore,
 	}
 }
 
-func (s *Service) Register(email, password string) (AuthResult, error) {
+func (s *Service) Register(email, password, displayName, username, emailVisibility string) (AuthResult, error) {
 	if err := validateCredentials(email, password); err != nil {
+		return AuthResult{}, err
+	}
+	if err := validateRegistrationProfile(displayName, username, emailVisibility); err != nil {
 		return AuthResult{}, err
 	}
 
@@ -40,11 +45,19 @@ func (s *Service) Register(email, password string) (AuthResult, error) {
 		return AuthResult{}, ErrUnauthorized
 	}
 
+	user, err := s.profileStore.CreateProfile(CreateProfileParams{
+		ID:              resp.User.ID,
+		Email:           resp.User.Email,
+		DisplayName:     displayName,
+		Username:        username,
+		EmailVisibility: emailVisibility,
+	})
+	if err != nil {
+		return AuthResult{}, err
+	}
+
 	result := AuthResult{
-		User: User{
-			ID:    resp.User.ID,
-			Email: resp.User.Email,
-		},
+		User:                   user,
 		NeedsEmailConfirmation: resp.Session == nil,
 	}
 
@@ -69,12 +82,15 @@ func (s *Service) Login(email, password string) (AuthResult, error) {
 		return AuthResult{}, ErrUnauthorized
 	}
 
+	user, err := s.profileStore.FindProfileByID(resp.User.ID)
+	if err != nil {
+		return AuthResult{}, err
+	}
+	user.Email = resp.User.Email
+
 	return AuthResult{
 		Token: resp.AccessToken,
-		User: User{
-			ID:    resp.User.ID,
-			Email: resp.User.Email,
-		},
+		User:  user,
 	}, nil
 }
 
@@ -86,15 +102,20 @@ func (s *Service) Logout(token string) error {
 	return s.supabase.SignOut(token)
 }
 
-
 func (s *Service) Authenticate(token string) (User, error) {
 	user, err := s.supabase.GetUser(token)
 	if err != nil {
 		return User{}, err
 	}
-	return user, nil
-}
 
+	profile, err := s.profileStore.FindProfileByID(user.ID)
+	if err != nil {
+		return User{}, err
+	}
+
+	profile.Email = user.Email
+	return profile, nil
+}
 
 func validateCredentials(email, password string) error {
 	normalizedEmail := normalizeEmail(email)

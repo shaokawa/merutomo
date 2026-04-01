@@ -15,20 +15,33 @@ type Handler struct {
 }
 
 type authService interface {
-	Register(email, password string) (AuthResult, error)
+	Register(email, password, displayName, username, emailVisibility string) (AuthResult, error)
 	Login(email, password string) (AuthResult, error)
 	Logout(token string) error
 	Authenticate(token string) (User, error)
 }
 
 type userResponse struct {
-	ID    string `json:"id"`
-	Email string `json:"email"`
+	ID              string `json:"id"`
+	Email           string `json:"email"`
+	DisplayName     string `json:"display_name"`
+	Username        string `json:"username"`
+	ProfileText     string `json:"profile_text"`
+	AvatarURL       string `json:"avatar_url"`
+	EmailVisibility string `json:"email_visibility"`
 }
 
 type authResponse struct {
 	Token string       `json:"token"`
 	User  userResponse `json:"user"`
+}
+
+type registerRequest struct {
+	Email           string `json:"email"`
+	Password        string `json:"password"`
+	DisplayName     string `json:"display_name"`
+	Username        string `json:"username"`
+	EmailVisibility string `json:"email_visibility"`
 }
 
 type credentialsRequest struct {
@@ -41,21 +54,25 @@ func NewHandler(service authService) *Handler {
 }
 
 func (h *Handler) Register(c *gin.Context) {
-	var req credentialsRequest
+	var req registerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
 
-	result, err := h.service.Register(req.Email, req.Password)
+	result, err := h.service.Register(req.Email, req.Password, req.DisplayName, req.Username, req.EmailVisibility)
 	if err != nil {
 		var apiErr *SupabaseAPIError
 
 		switch {
 		case errors.Is(err, ErrEmailAlreadyExists):
 			c.JSON(http.StatusConflict, gin.H{"error": "email already exists"})
+		case errors.Is(err, ErrUsernameAlreadyExists):
+			c.JSON(http.StatusConflict, gin.H{"error": "username already exists"})
 		case errors.Is(err, ErrInvalidCredentials):
 			c.JSON(http.StatusBadRequest, gin.H{"error": "email or password is invalid"})
+		case errors.Is(err, ErrInvalidProfile):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "display_name, username, or email_visibility is invalid"})
 		case errors.As(err, &apiErr):
 			c.JSON(apiErr.Status, gin.H{
 				"error":   "supabase auth error",
@@ -147,7 +164,6 @@ func (h *Handler) Logout(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-
 func (h *Handler) Me(c *gin.Context) {
 	user, ok := CurrentUser(c)
 	if !ok {
@@ -170,7 +186,18 @@ func (h *Handler) RequireAuth() gin.HandlerFunc {
 
 		user, err := h.service.Authenticate(token)
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			var apiErr *SupabaseAPIError
+
+			switch {
+			case errors.Is(err, ErrUnauthorized):
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			case errors.Is(err, ErrUserProfileNotFound):
+				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "user profile not found"})
+			case errors.As(err, &apiErr):
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			default:
+				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "failed to authenticate"})
+			}
 			return
 		}
 
@@ -198,8 +225,13 @@ func buildAuthResponse(result AuthResult) authResponse {
 
 func toUserResponse(user User) userResponse {
 	return userResponse{
-		ID:    user.ID,
-		Email: user.Email,
+		ID:              user.ID,
+		Email:           user.Email,
+		DisplayName:     user.DisplayName,
+		Username:        user.Username,
+		ProfileText:     user.ProfileText,
+		AvatarURL:       user.AvatarURL,
+		EmailVisibility: user.EmailVisibility,
 	}
 }
 

@@ -18,8 +18,11 @@ func TestAuthFlow(t *testing.T) {
 	engine := newTestRouter()
 
 	registerBody := map[string]string{
-		"email":    "user@example.com",
-		"password": "password123",
+		"email":            "user@example.com",
+		"password":         "password123",
+		"display_name":     "Test User",
+		"username":         "test_user",
+		"email_visibility": "approval_required",
 	}
 
 	registerResp := performJSONRequest(t, engine, http.MethodPost, "/auth/register", registerBody, "")
@@ -30,7 +33,10 @@ func TestAuthFlow(t *testing.T) {
 	var registerPayload struct {
 		Token string `json:"token"`
 		User  struct {
-			Email string `json:"email"`
+			Email           string `json:"email"`
+			DisplayName     string `json:"display_name"`
+			Username        string `json:"username"`
+			EmailVisibility string `json:"email_visibility"`
 		} `json:"user"`
 	}
 	if err := json.Unmarshal(registerResp.Body.Bytes(), &registerPayload); err != nil {
@@ -43,6 +49,15 @@ func TestAuthFlow(t *testing.T) {
 
 	if registerPayload.User.Email != "user@example.com" {
 		t.Fatalf("expected normalized email, got %q", registerPayload.User.Email)
+	}
+	if registerPayload.User.DisplayName != "Test User" {
+		t.Fatalf("expected display_name in register response, got %q", registerPayload.User.DisplayName)
+	}
+	if registerPayload.User.Username != "test_user" {
+		t.Fatalf("expected username in register response, got %q", registerPayload.User.Username)
+	}
+	if registerPayload.User.EmailVisibility != "approval_required" {
+		t.Fatalf("expected email_visibility in register response, got %q", registerPayload.User.EmailVisibility)
 	}
 
 	meResp := performJSONRequest(t, engine, http.MethodGet, "/auth/me", nil, registerPayload.Token)
@@ -62,8 +77,11 @@ func TestRegisterRejectsDuplicateEmail(t *testing.T) {
 	engine := newTestRouter()
 
 	body := map[string]string{
-		"email":    "user@example.com",
-		"password": "password123",
+		"email":            "user@example.com",
+		"password":         "password123",
+		"display_name":     "Test User",
+		"username":         "test_user",
+		"email_visibility": "approval_required",
 	}
 
 	firstResp := performJSONRequest(t, engine, http.MethodPost, "/auth/register", body, "")
@@ -114,10 +132,13 @@ type fakeAuthService struct {
 }
 
 type fakeAuthUser struct {
-	ID       string
-	Email    string
-	Password string
-	Token    string
+	ID              string
+	Email           string
+	Password        string
+	Token           string
+	DisplayName     string
+	Username        string
+	EmailVisibility string
 }
 
 func newFakeAuthService() *fakeAuthService {
@@ -127,10 +148,20 @@ func newFakeAuthService() *fakeAuthService {
 	}
 }
 
-func (s *fakeAuthService) Register(email, password string) (auth.AuthResult, error) {
+func (s *fakeAuthService) Register(email, password, displayName, username, emailVisibility string) (auth.AuthResult, error) {
 	normalizedEmail := strings.ToLower(strings.TrimSpace(email))
-	if normalizedEmail == "" || len(password) < 8 {
-		return auth.AuthResult{}, auth.ErrInvalidCredentials
+	normalizedUsername := strings.ToLower(strings.TrimSpace(username))
+	normalizedVisibility := strings.ToLower(strings.TrimSpace(emailVisibility))
+	if normalizedVisibility == "" {
+		normalizedVisibility = "approval_required"
+	}
+	if normalizedEmail == "" || len(password) < 8 || strings.TrimSpace(displayName) == "" || normalizedUsername == "" {
+		return auth.AuthResult{}, auth.ErrInvalidProfile
+	}
+	switch normalizedVisibility {
+	case "public", "approval_required", "private":
+	default:
+		return auth.AuthResult{}, auth.ErrInvalidProfile
 	}
 
 	if _, exists := s.usersByEmail[normalizedEmail]; exists {
@@ -139,10 +170,13 @@ func (s *fakeAuthService) Register(email, password string) (auth.AuthResult, err
 
 	s.nextID++
 	user := fakeAuthUser{
-		ID:       "user-id",
-		Email:    normalizedEmail,
-		Password: password,
-		Token:    "token-value",
+		ID:              "user-id",
+		Email:           normalizedEmail,
+		Password:        password,
+		Token:           "token-value",
+		DisplayName:     strings.TrimSpace(displayName),
+		Username:        normalizedUsername,
+		EmailVisibility: normalizedVisibility,
 	}
 
 	if s.nextID > 1 {
@@ -156,8 +190,11 @@ func (s *fakeAuthService) Register(email, password string) (auth.AuthResult, err
 	return auth.AuthResult{
 		Token: user.Token,
 		User: auth.User{
-			ID:    user.ID,
-			Email: user.Email,
+			ID:              user.ID,
+			Email:           user.Email,
+			DisplayName:     user.DisplayName,
+			Username:        user.Username,
+			EmailVisibility: user.EmailVisibility,
 		},
 	}, nil
 }
@@ -172,8 +209,11 @@ func (s *fakeAuthService) Login(email, password string) (auth.AuthResult, error)
 	return auth.AuthResult{
 		Token: user.Token,
 		User: auth.User{
-			ID:    user.ID,
-			Email: user.Email,
+			ID:              user.ID,
+			Email:           user.Email,
+			DisplayName:     user.DisplayName,
+			Username:        user.Username,
+			EmailVisibility: user.EmailVisibility,
 		},
 	}, nil
 }
@@ -193,8 +233,11 @@ func (s *fakeAuthService) Authenticate(token string) (auth.User, error) {
 	}
 
 	return auth.User{
-		ID:    user.ID,
-		Email: user.Email,
+		ID:              user.ID,
+		Email:           user.Email,
+		DisplayName:     user.DisplayName,
+		Username:        user.Username,
+		EmailVisibility: user.EmailVisibility,
 	}, nil
 }
 

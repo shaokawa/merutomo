@@ -25,7 +25,8 @@ func main() {
 	r := gin.Default()
 
 	supabaseClient := auth.NewSupabaseClient(cfg.SupabaseURL, cfg.SupabaseAnonKey)
-	service := auth.NewService(supabaseClient)
+	profileStore := auth.NewPostgresProfileStore(dbPool)
+	service := auth.NewService(supabaseClient, profileStore)
 	handler := auth.NewHandler(service)
 
 	router.Setup(r, handler)
@@ -35,4 +36,3 @@ func main() {
 		log.Fatal(err)
 	}
 }
-
